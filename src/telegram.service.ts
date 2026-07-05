@@ -137,7 +137,7 @@ export class TelegramService {
             }
 
             await ctx.reply(
-                `👋 HSS Academy botiga xush kelibsiz
+                `👋 KiberXona botiga xush kelibsiz
 
 Bu yerda siz:
 
@@ -205,7 +205,7 @@ Bu yerda siz:
 
                 if (!user) {
                     await ctx.reply(
-                        `❌ Bu telefon raqam bilan HSS Academy akkaunti topilmadi.
+                        `❌ Bu telefon raqam bilan KiberXona akkaunti topilmadi.
 
 Avval mobil ilovada ro'yxatdan o'ting.`,
                         this.mainMenuKeyboard(),
@@ -225,7 +225,7 @@ Avval mobil ilovada ro'yxatdan o'ting.`,
                 await ctx.reply(
                     `✅ Telefon raqamingiz muvaffaqiyatli tasdiqlandi.
 
-Endi HSS Academy ilovasiga qaytishingiz mumkin.`,
+Endi KiberXona ilovasiga qaytishingiz mumkin.`,
                     this.mainMenuKeyboard(),
                 );
             } catch (err) {
