@@ -4,12 +4,35 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum Role {
   USER
   ADMIN
+}
+
+enum AchievementType {
+  COURSE
+  CHALLENGE
+  LAB
+  LEVEL
+  SPECIAL
+  EVENT
+}
+
+model AppConfig {
+  // Singleton record. Its stable id makes the setting safe to read and update.
+  id                String   @id @default("global")
+  stableVersionOnly Boolean  @default(true)
+  maintenanceMode   Boolean  @default(false)
+  minSupportedVersion String @default("1.0.0")
+  latestVersion     String   @default("1.0.0")
+  apiVersion        String   @default("1.0.0")
+  introVideoUrl     String?
+  ctfIntroVideoUrl  String?
+  labIntroVideoUrl  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model User {
@@ -34,6 +57,19 @@ model User {
   cyberLabReports  CyberLabReport[]
   trainSessions TrainSession[]
 
+  challengeProgresses ChallengeProgress[]
+  challengeSubmissions ChallengeFlagSubmission[]
+  challengeComments ChallengeComment[]
+  challengeCommentLikes ChallengeCommentLike[]
+  challengeBadges ChallengeBadgeAward[]
+  createdChallenges Challenge[] @relation("ChallengeAuthor")
+  challengeBookmarks ChallengeBookmark[]
+  challengeLikes ChallengeLike[]
+  challengeObjectiveProgresses ChallengeObjectiveProgress[]
+  challengeHintUnlocks ChallengeHintUnlock[]
+
+  achievements UserAchievement[]
+
   phone         String?   @unique
 
   isVerified    Boolean   @default(false)
@@ -53,6 +89,8 @@ model Course {
   thumbnail   String?
   isPremium   Boolean @default(false)
   xpReward    Int     @default(100)
+  achievementId String?
+  achievement Achievement? @relation(fields: [achievementId], references: [id], onDelete: SetNull)
 
   category String @default("cybersecurity")
   level    String @default("beginner") // beginner | junior | middle | senior
@@ -62,6 +100,7 @@ model Course {
   sections Section[]
 
   userCourseAccess UserCourseAccess[] // 👈 ADD SHU
+  achievementAwards UserAchievement[]
 
   createdAt DateTime @default(now())
 }
@@ -264,6 +303,8 @@ model CyberLab {
   username String @default("analyst")
 
   xpReward Int @default(100)
+  achievementId String?
+  achievement Achievement? @relation(fields: [achievementId], references: [id], onDelete: SetNull)
 
   estimatedTime Int @default(30)
 
@@ -283,6 +324,7 @@ model CyberLab {
   updatedAt DateTime @updatedAt
 
   sessions CyberLabSession[]
+  achievementAwards UserAchievement[]
 }
 
 model CyberLabSession {
@@ -489,4 +531,336 @@ enum NewsCategory {
   LAB
   EVENT
   UPDATE
+}
+
+enum ChallengeDifficulty {
+  BEGINNER
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+enum ChallengeContentType {
+  MARKDOWN
+  INFO
+  WARNING
+  SUCCESS
+  QUOTE
+  DIVIDER
+  TABLE
+  IMAGE
+  VIDEO
+  DOWNLOAD
+  LINK
+  CODE
+}
+
+enum ChallengeResourceType {
+  PDF
+  ZIP
+  PCAP
+  APK
+  IMAGE
+  VIDEO
+  LINK
+  DOC
+  TXT
+  LOG
+  JSON
+}
+
+model Challenge {
+  id String @id @default(uuid())
+  slug String @unique
+  title String
+  summary String @db.Text
+  description String @db.Text
+  category String
+  tags String[] @default([])
+  difficulty ChallengeDifficulty @default(MEDIUM)
+  coverUrl String?
+  thumbnailUrl String?
+  xpReward Int @default(100)
+  achievementId String?
+  achievement Achievement? @relation(fields: [achievementId], references: [id], onDelete: SetNull)
+  estimatedTime Int @default(30)
+  estimatedReads Int @default(0)
+  estimatedDownloads Int @default(0)
+  version String @default("1.0")
+  language String @default("uz")
+  shareTitle String?
+  shareDescription String? @db.Text
+  shareImage String?
+  isPublished Boolean @default(false)
+  publishedAt DateTime?
+  views Int @default(0)
+
+  badgeTitle String
+  badgeDescription String @db.Text
+  badgeIcon String
+
+  createdById String
+  createdBy User @relation("ChallengeAuthor", fields: [createdById], references: [id])
+
+  contents ChallengeContent[]
+  objectives ChallengeObjective[]
+  resources ChallengeResource[]
+  hints ChallengeHint[]
+  badge ChallengeBadge?
+  flags ChallengeFlag[]
+  progresses ChallengeProgress[]
+  submissions ChallengeFlagSubmission[]
+  comments ChallengeComment[]
+  badgeAwards ChallengeBadgeAward[]
+  bookmarks ChallengeBookmark[]
+  likes ChallengeLike[]
+  achievementAwards UserAchievement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isPublished, createdAt])
+  @@index([category, difficulty])
+}
+
+model Achievement {
+  id               String          @id @default(uuid())
+  code             String          @unique
+  type             AchievementType
+  title            String
+  subtitle         String?
+  description      String          @db.Text
+  badgeImage       String?
+  rarity           String          @default("COMMON")
+  xp               Int             @default(0)
+  level            Int?
+  shareTitle       String?
+  shareDescription String?         @db.Text
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  userAchievements UserAchievement[]
+  courses          Course[]
+  challenges       Challenge[]
+  labs             CyberLab[]
+
+  @@index([type])
+}
+
+model UserAchievement {
+  id            String      @id @default(uuid())
+  userId        String
+  achievementId String
+  courseId      String?
+  challengeId   String?
+  labId         String?
+  earnedAt      DateTime    @default(now())
+  shareCount    Int         @default(0)
+  downloadCount Int         @default(0)
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Restrict)
+  course      Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  challenge   Challenge?  @relation(fields: [challengeId], references: [id], onDelete: SetNull)
+  lab         CyberLab?   @relation(fields: [labId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, achievementId])
+  @@index([userId, earnedAt])
+  @@index([achievementId])
+}
+
+model ChallengeContent {
+  id String @id @default(uuid())
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  type ChallengeContentType
+  title String?
+  body String? @db.Text
+  url String?
+  fileName String?
+  order Int
+  unlockAfterFlagOrder Int @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([challengeId, order])
+  @@index([challengeId, unlockAfterFlagOrder])
+}
+
+model ChallengeObjective {
+  id String @id @default(uuid())
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  title String
+  description String? @db.Text
+  order Int
+  unlockAfterFlagOrder Int @default(0)
+  progresses ChallengeObjectiveProgress[]
+  @@unique([challengeId, order])
+}
+
+model ChallengeObjectiveProgress {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  objectiveId String
+  objective ChallengeObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  completedAt DateTime @default(now())
+  @@unique([userId, objectiveId])
+}
+
+model ChallengeResource {
+  id String @id @default(uuid())
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  title String
+  type ChallengeResourceType
+  url String
+  fileName String?
+  size Int?
+  order Int
+  unlockAfterFlagOrder Int @default(0)
+  @@unique([challengeId, order])
+}
+
+model ChallengeHint {
+  id String @id @default(uuid())
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  title String
+  content String @db.Text
+  order Int
+  costXp Int @default(0)
+  unlockAfterFlagOrder Int @default(0)
+  unlocks ChallengeHintUnlock[]
+  @@unique([challengeId, order])
+}
+
+model ChallengeHintUnlock {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hintId String
+  hint ChallengeHint @relation(fields: [hintId], references: [id], onDelete: Cascade)
+  unlockedAt DateTime @default(now())
+  @@unique([userId, hintId])
+}
+
+model ChallengeBookmark {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@unique([userId, challengeId])
+}
+
+model ChallengeLike {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@unique([userId, challengeId])
+}
+
+model ChallengeBadge {
+  id String @id @default(uuid())
+  challengeId String @unique
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  title String
+  icon String
+  description String @db.Text
+  color String @default("#22C55E")
+  createdAt DateTime @default(now())
+}
+
+model ChallengeFlag {
+  id String @id @default(uuid())
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  title String
+  description String? @db.Text
+  flagHash String
+  order Int
+  xpReward Int @default(0)
+  successMessage String? @db.Text
+  createdAt DateTime @default(now())
+
+  submissions ChallengeFlagSubmission[]
+  @@unique([challengeId, order])
+}
+
+model ChallengeProgress {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  solvedFlagCount Int @default(0)
+  startedAt DateTime @default(now())
+  solvedAt DateTime?
+  xpAwarded Boolean @default(false)
+
+  @@unique([userId, challengeId])
+  @@index([challengeId, solvedAt])
+}
+
+model ChallengeFlagSubmission {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  flagId String
+  flag ChallengeFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  submittedValue String @db.Text
+  isCorrect Boolean
+  createdAt DateTime @default(now())
+
+  @@index([userId, challengeId, createdAt])
+}
+
+model ChallengeComment {
+  id String @id @default(uuid())
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId String?
+  parent ChallengeComment? @relation("ChallengeCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies ChallengeComment[] @relation("ChallengeCommentReplies")
+  body String @db.Text
+  isDeleted Boolean @default(false)
+  isPinned Boolean @default(false)
+  likes ChallengeCommentLike[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([challengeId, parentId, createdAt])
+}
+
+model ChallengeCommentLike {
+  id String @id @default(uuid())
+  commentId String
+  comment ChallengeComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([commentId, userId])
+}
+
+model ChallengeBadgeAward {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  awardedAt DateTime @default(now())
+
+  @@unique([userId, challengeId])
+  @@index([userId, awardedAt])
 }
